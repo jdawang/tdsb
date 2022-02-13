@@ -243,4 +243,4 @@ mv <- mapview(
     ),
     layer.name="Zoning"
   )
-mapshot(removeMapJunk(mv@map, junk="homeButton"), url="tdsb_map.html")
+mapshot(removeMapJunk(mv@map, junk="homeButton"), url="index")
