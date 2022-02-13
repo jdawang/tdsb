@@ -206,6 +206,7 @@ mv <- mapview(
       zcol=c(
         "school_name",
         "grade_range",
+        "ward",
         "revised_capacity_2020",
         "total_head_count",
         "surplus_seats_2020",
