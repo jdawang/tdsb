@@ -182,10 +182,6 @@ census_data <- read_rds("data/census_pop.rds") %>%
   filter(!is.na(pct_change)) %>%
   mutate(percent_change = paste0(round(100*pct_change, 1), "%"))
 
-subway_data <- read_sf("data/ttc-subway-shapefile-wgs84/TTC_SUBWAY_LINES_WGS84.shp") %>%
-  rename_all(str_to_lower) %>%
-  mutate()
-
 mv <- mapview(
   ward_data,
   label=c("area_desc"),
@@ -243,4 +239,4 @@ mv <- mapview(
     ),
     layer.name="Zoning"
   )
-mapshot(removeMapJunk(mv@map, junk="homeButton"), url="index")
+mapshot(removeMapJunk(mv@map, junk="homeButton"), url="index.html")
