@@ -188,7 +188,8 @@ mv <- mapview(
   alpha.regions=0,
   popup=FALSE,
   legend=FALSE,
-  layer.name="Ward boundaries"
+  layer.name="Ward boundaries",
+  hide=TRUE
 ) +
   mapview(
     tdsb_joined,
@@ -196,7 +197,7 @@ mv <- mapview(
     label="school_name",
     zcol="utilization_2020_capped",
     layer.name="School utilization",
-    col.regions=hcl.colors(473,"mako"),
+    col.regions=viridis::mako(400, direction=-1),
     popup=popupTable2(
       tdsb_joined,
       zcol=c(
@@ -237,6 +238,8 @@ mv <- mapview(
       row.numbers=FALSE,
       feature.id=FALSE
     ),
-    layer.name="Zoning"
+    layer.name="Zoning",
+    hide=TRUE
   )
+
 mapshot(removeMapJunk(mv@map, junk="homeButton"), url="index.html")
