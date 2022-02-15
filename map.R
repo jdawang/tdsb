@@ -161,11 +161,12 @@ zoning_data <- read_sf(
   "data/2019-zoning-by-law-569-2013-wgs84/ZONING_ZONE_CATAGORIES_WGS84.shp"
 ) %>%
   rename_all(str_to_lower) %>%
-  filter(
-    st_is_valid(geometry),
-    !st_is_empty(geometry),
-    !is.na(zn_zone),
-    str_detect(zn_zone, fixed("R"))
+  filter(!is.na(zn_zone), str_detect(zn_zone, fixed("R"))) %>%
+  mutate(
+    density_string=ifelse(
+      !is.na(density), str_c("(", as.character(density), " FSI)"), ""
+    ),
+    zn_string=coalesce(zn_string, str_c(zn_zone, density_string, sep=" "))
   )
 
 census_data <- read_rds("data/census_pop.rds") %>%
@@ -197,7 +198,7 @@ mv <- mapview(
     label="school_name",
     zcol="utilization_2020_capped",
     layer.name="School utilization",
-    col.regions=viridis::mako(400, direction=-1),
+    col.regions=viridis::mako(473, direction=-1),
     popup=popupTable2(
       tdsb_joined,
       zcol=c(
@@ -230,7 +231,7 @@ mv <- mapview(
   mapview(
     zoning_data,
     zcol="zn_zone",
-    label="zn_zone",
+    label="zn_string",
     col.regions=brewer.pal(10, "Paired"),
     popup=popupTable2(
       zoning_data,
