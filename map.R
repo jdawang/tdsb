@@ -149,8 +149,17 @@ tdsb_joined <- tdsb_enrolment_data %>%
   inner_join(tdsb_data, by="lowercase_name") %>%
   st_as_sf() %>%
   mutate(
-    utilization_2020_capped=ifelse(utilization_2020 > 1, 1, utilization_2020),
-    utilization_2020_f=paste0(round(100*utilization_2020), "%")
+    utilization_2020_clipped=100*case_when(
+      utilization_2020 > 1 ~ 1,
+      utilization_2020 < 0.2 ~ 0.2,
+      TRUE ~ utilization_2020
+    ),
+    utilization_2020_f=paste0(round(100*utilization_2020), "%"),
+    surplus_seats_2020_clipped=case_when(
+      surplus_seats_2020 < 0 ~ 0,
+      surplus_seats_2020 > 654 ~ 654,
+      TRUE ~ surplus_seats_2020
+    )
   )
 
 tdsb_data_unjoined <- tdsb_enrolment_data %>%
@@ -176,7 +185,7 @@ census_data <- read_rds("data/census_pop.rds") %>%
     pct_change = change / population_ca16,
     pct_change_trimmed = case_when(
       pct_change > 0.15 ~ 0.15,
-      pct_change < -0.08 ~ -0.08,
+      pct_change < -0.15 ~ -0.15,
       TRUE ~ pct_change
     ) * 100
   ) %>%
@@ -194,11 +203,13 @@ mv <- mapview(
 ) +
   mapview(
     tdsb_joined,
-    cex="surplus_seats_2020",
+    cex="surplus_seats_2020_clipped",
     label="school_name",
-    zcol="utilization_2020_capped",
-    layer.name="School utilization",
-    col.regions=viridis::mako(473, direction=-1),
+    zcol="utilization_2020_clipped",
+    layer.name="School utilization %",
+    col.regions=viridis::inferno(470, direction=-1),
+    alpha.regions=0.85,
+    alpha=0.8,
     popup=popupTable2(
       tdsb_joined,
       zcol=c(
@@ -219,6 +230,7 @@ mv <- mapview(
     zcol="pct_change_trimmed",
     col.regions=brewer.pal(11, "PiYG"),
     alpha=0.4,
+    alpga.regions=0.6,
     label="percent_change",
     layer.name="% pop. change, 2016 to 2021",
     popup=popupTable2(
@@ -232,7 +244,7 @@ mv <- mapview(
     zoning_data,
     zcol="zn_zone",
     label="zn_string",
-    col.regions=brewer.pal(10, "Paired"),
+    col.regions=brewer.pal(10, "Set3")[c(1,2,3,7,5,6,4,8,9,10)],
     popup=popupTable2(
       zoning_data,
       zcol=c("zn_zone", "density"),
