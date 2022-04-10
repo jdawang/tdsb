@@ -1,10 +1,14 @@
+options(java.parameters = "-Xmx12G")
 library(opendatatoronto)
 library(tidyverse)
 library(tmap)
 library(sf)
 library(mapview)
 library(RColorBrewer)
-mapviewOptions(fgb=FALSE)
+library(r5r)
+library(automap)
+mapviewOptions(fgb=TRUE)
+r5r_core <- setup_r5("data")
 
 get_toronto_data <- function(id) {
   resources <- list_package_resources(id)
@@ -192,8 +196,114 @@ census_data <- read_rds("data/census_pop.rds") %>%
   filter(!is.na(pct_change)) %>%
   mutate(percent_change = paste0(round(100*pct_change, 1), "%"))
 
+toronto_grid <- st_union(ward_data) %>%
+  st_make_grid(n=c(100, 100),square=FALSE, what="centers") %>%
+  as_tibble() %>%
+  distinct() %>%
+  mutate(num_schools=0L) %>%
+  st_as_sf() %>%
+  mutate(id=as.character(row_number())) %>%
+  st_intersection(st_union(ward_data))
+
+toronto_grid_polygons <- st_union(ward_data) %>%
+  st_make_grid(n=c(100, 100),square=FALSE, what="polygons") %>%
+  as_tibble() %>%
+  st_as_sf()
+
+toronto_grid_w_elementary_schools <- toronto_grid %>%
+  bind_rows(
+    tdsb_joined %>%
+      filter(panel %in% c("E", "ES")) %>%
+      mutate(
+        id=as.character(`_id`),
+        num_schools=ifelse(surplus_seats_2020 > 0, surplus_seats_2020, 0),
+        .keep="unused"
+      ) %>%
+      select(id, num_schools)
+  )
+
+toronto_grid_w_secondary_schools <- toronto_grid %>%
+  bind_rows(
+    tdsb_joined %>%
+      filter(panel %in% c("ES", "S")) %>%
+      mutate(
+        id=as.character(`_id`),
+        num_schools=ifelse(surplus_seats_2020 > 0, surplus_seats_2020, 0),
+        .keep="unused"
+      ) %>%
+      select(id, num_schools)
+  )
+
+# routing inputs
+
+access_elementary <- accessibility(
+  r5r_core,
+  origins = toronto_grid_w_elementary_schools,
+  destinations = toronto_grid_w_elementary_schools,
+  opportunities_colname="num_schools",
+  mode = "WALK",
+  decay_function = "step",
+  cutoffs = 21,
+  departure_datetime = as.POSIXct("09-03-2022 8:00:00", format = "%d-%m-%Y %H:%M:%S"),
+  verbose = FALSE,
+  progress=TRUE,
+  max_walk_dist=2000
+)
+
+access_secondary <- accessibility(
+  r5r_core,
+  origins = toronto_grid_w_secondary_schools,
+  destinations = toronto_grid_w_secondary_schools,
+  opportunities_colname="num_schools",
+  mode = c("WALK", "BICYCLE", "TRANSIT"),
+  decay_function = "step",
+  cutoffs = 31,
+  departure_datetime = as.POSIXct("09-04-2022 8:00:00", format = "%d-%m-%Y %H:%M:%S"),
+  verbose = FALSE,
+  progress=TRUE,
+  max_walk_dist=2000
+)
+
+access_grid_elementary <- access_elementary %>%
+  inner_join(toronto_grid, by=c('from_id'='id')) %>%
+  as_tibble() %>%
+  st_as_sf() %>%
+  st_join(toronto_grid_polygons, ., st_covers, left=FALSE) %>%
+  distinct(geometry, .keep_all=TRUE)
+
+access_grid_secondary <- access_secondary %>%
+  inner_join(toronto_grid, by=c('from_id'='id')) %>%
+  as_tibble() %>%
+  st_as_sf() %>%
+  st_join(toronto_grid_polygons, ., st_covers, left=FALSE) %>%
+  distinct(geometry, .keep_all=TRUE)
+
+p_elem <- ggplot(access_grid_elementary) +
+  geom_sf(aes(fill=accessibility), color=NA) +
+  geom_sf(data=st_boundary(ward_data)) +
+  scale_fill_viridis_c() +
+  labs(
+    fill="# of open seats",
+    title="Number of open elementary seats within 20 minutes walk"
+  ) +
+  theme(axis.text=element_blank(), axis.ticks=element_blank())
+
+ggsave("elementary_accessibility.png", p_elem)
+
+p_second <- ggplot(access_grid_secondary) +
+  geom_sf(aes(fill=accessibility), color=NA) +
+  geom_sf(data=st_boundary(ward_data)) +
+  scale_fill_viridis_c()+
+  labs(
+    fill="# of open seats",
+    title="Number of open secondary seats within 30 minutes transit"
+  ) +
+  theme(axis.text=element_blank(), axis.ticks=element_blank())
+
+ggsave("secondary_accessibility.png", p_second)
+
 mv <- mapview(
-  ward_data,
+  ward_data %>% st_boundary(),
   label=c("area_desc"),
   alpha.regions=0,
   popup=FALSE,
@@ -230,7 +340,7 @@ mv <- mapview(
     zcol="pct_change_trimmed",
     col.regions=brewer.pal(11, "PiYG"),
     alpha=0.4,
-    alpga.regions=0.6,
+    alpha.regions=0.6,
     label="percent_change",
     layer.name="% pop. change, 2016 to 2021",
     popup=popupTable2(
@@ -253,6 +363,24 @@ mv <- mapview(
     ),
     layer.name="Zoning",
     hide=TRUE
+  ) +
+  mapview(
+    access_grid_elementary,
+    zcol="accessibility",
+    layer.name="Open elementary seats within 20 minutes walking",
+    hide=TRUE,
+    alpha=0,
+    alpha.regions=0.85,
+    popup=FALSE
+  ) +
+  mapview(
+    access_grid_secondary,
+    zcol="accessibility",
+    layer.name="Open secondary seats within 30 minutes transit",
+    hide=TRUE,
+    alpha=0,
+    alpha.regions=0.85,
+    popup=FALSE
   )
 
 mapshot(removeMapJunk(mv@map, junk="homeButton"), url="index.html")
