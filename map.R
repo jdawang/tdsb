@@ -308,8 +308,7 @@ mv <- mapview(
   alpha.regions=0,
   popup=FALSE,
   legend=FALSE,
-  layer.name="Ward boundaries",
-  hide=TRUE
+  layer.name="Ward boundaries"
 ) +
   mapview(
     tdsb_joined,
